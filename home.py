@@ -151,7 +151,11 @@ def get_optimization_weights():
 
 # 选择算法
 with st.sidebar:
-    algorithms = ["SA (Simulated Annealing)", "GA (Genetic Algorithm)", "PSO (Particle Swarm Optimization)", "PSO + SA (Hybrid Optimization)", "ACO (Ant Colony Optimization)", "DE (Differential Evolution)", "CoEA (Co-Evolutionary Algorithm)", "EDA (Estimation of Distribution Algorithm)", "MOEA/D (Multi-Objective Evolutionary Algorithm based on Decomposition)"]
+    algorithms = ["SA (Simulated Annealing)", "GA (Genetic Algorithm)", "PSO (Particle Swarm Optimization)",
+                  "PSO + SA (Hybrid Optimization)", "ACO (Ant Colony Optimization)", "DE (Differential Evolution)",
+                  "CoEA (Co-Evolutionary Algorithm)", "EDA (Estimation of Distribution Algorithm)",
+                  "MOEA/D (Multi-Objective Evolutionary Algorithm based on Decomposition)",
+                  "HACO (Hybrid Ant Colony Optimization)", " ADE(Adaptive Differential Evolution)"]
     selected_algorithm = st.selectbox("Select Optimization Algorithm", algorithms)
     use_adaptive = st.checkbox("Use Adaptive Parameter Adjustment", value=False)
 
@@ -272,6 +276,28 @@ with st.sidebar:
         lambda_3 = st.number_input("Lambda 3 (Balance Weight)", value=1.0)
         lambda_4 = st.number_input("Lambda 4 (Space Utilization Weight)", value=1.0)
 
+    elif selected_algorithm == "HACO (Hybrid Ant Colony Optimization)":
+        # 设置 HACO 特有的参数
+        st.subheader("HACO Parameters")
+
+        # 蚁群参数设置
+        num_ants = st.number_input("Number of Ants", 10, 100, 50)
+        alpha = st.slider("Pheromone Importance (α)", 0.0, 5.0, 1.0)
+        beta = st.slider("Heuristic Importance (β)", 0.0, 5.0, 2.0)
+        evaporation_rate = st.slider("Evaporation Rate", 0.0, 1.0, 0.5)
+        q = st.number_input("Pheromone Constant (Q)", 1.0, 1000.0, 100.0)
+
+        # 模拟退火参数设置
+        sa_initial_temp = st.number_input("Initial Temperature (Simulated Annealing)", value=1000.0)
+        sa_cooling_rate = st.slider("Cooling Rate (Simulated Annealing)", 0.0, 1.0, 0.9)
+        sa_min_temp = st.number_input("Minimum Temperature (Simulated Annealing)", value=0.1)
+        max_sa_iter = st.number_input("Max SA Iterations", 1, 1000, 100)
+
+        # 优化目标权重
+        lambda_1, lambda_2, lambda_3, lambda_4 = get_optimization_weights()
+
+        # 用户输入最大迭代次数
+        max_iter = st.number_input("Max HACO Iterations", 1, 1000, 100)
 
 # 优化分析
 if df is not None:
@@ -1937,6 +1963,118 @@ if df is not None:
             metrics_df.to_csv(file_path, index=False)
 
 
+    class HACO_with_SA:
+        def __init__(self, num_ants, num_positions, alpha, beta, evaporation_rate, q, max_iter, lambda_1, lambda_2,
+                     lambda_3, lambda_4, sa_initial_temp, sa_cooling_rate, sa_min_temp, max_sa_iter, objectives):
+            self.num_ants = num_ants  # 蚂蚁数量
+            self.num_positions = num_positions  # 库区/垛位数量
+            self.alpha = alpha  # 信息素重要程度因子
+            self.beta = beta  # 启发因子重要程度因子
+            self.evaporation_rate = evaporation_rate  # 信息素蒸发速率
+            self.q = q  # 信息素强度
+            self.max_iter = max_iter  # 最大迭代次数
+            self.lambda_1 = lambda_1  # 高度权重
+            self.lambda_2 = lambda_2  # 翻堆权重
+            self.lambda_3 = lambda_3  # 平衡性权重
+            self.lambda_4 = lambda_4  # 空间利用率权重
+            self.pheromone_matrix = np.ones((num_plates, num_positions))  # 初始化信息素矩阵为1
+            self.best_score = np.inf  # 最优得分
+            self.best_position = None  # 最优解
+            self.objectives = objectives  # 目标函数
+
+            # 模拟退火参数
+            self.sa_initial_temp = sa_initial_temp  # 初始温度
+            self.sa_cooling_rate = sa_cooling_rate  # 降温率
+            self.sa_min_temp = sa_min_temp  # 最小温度
+            self.max_sa_iter = max_sa_iter  # 最大迭代次数
+
+        def evaluate(self, position):
+            # 适应度函数：计算蚂蚁位置的得分
+            combined_movement_turnover_penalty = self.objectives.minimize_stack_movements_and_turnover(position)
+            energy_time_penalty = self.objectives.minimize_outbound_energy_time_with_batch(position)
+            balance_penalty = self.objectives.maximize_inventory_balance_v2(position)
+            space_utilization = self.objectives.maximize_space_utilization_v3(position)
+
+            score = (self.lambda_1 * combined_movement_turnover_penalty +
+                     self.lambda_2 * energy_time_penalty +
+                     self.lambda_3 * balance_penalty -
+                     self.lambda_4 * space_utilization)
+            return score
+
+        def sa_optimize(self, position):
+            # 模拟退火算法局部搜索
+            current_position = position.copy()
+            current_score = self.evaluate(current_position)
+            temperature = self.sa_initial_temp
+
+            for _ in range(self.max_sa_iter):
+                if temperature < self.sa_min_temp:
+                    break
+                new_position = current_position.copy()
+                random_index = np.random.randint(len(new_position))
+                new_position[random_index] = np.random.randint(0, self.num_positions)
+                new_score = self.evaluate(new_position)
+
+                # 模拟退火接受准则
+                delta_score = new_score - current_score
+                if delta_score < 0 or np.random.rand() < np.exp(-delta_score / temperature):
+                    current_position = new_position
+                    current_score = new_score
+
+                # 降温
+                temperature *= self.sa_cooling_rate
+
+            return current_position, current_score
+
+        def construct_solution(self):
+            # 蚂蚁通过信息素构建解
+            solution = []
+            for plate_idx in range(num_plates):
+                probabilities = self.calculate_transition_probabilities(plate_idx)
+                position = np.random.choice(self.num_positions, p=probabilities)
+                solution.append(position)
+            return np.array(solution)
+
+        def calculate_transition_probabilities(self, plate_idx):
+            pheromones = self.pheromone_matrix[plate_idx]
+            desirability = 1.0 / (np.arange(1, self.num_positions + 1))  # 启发因子
+            probabilities = (pheromones ** self.alpha) * (desirability ** self.beta)
+            return probabilities / probabilities.sum()  # 归一化概率
+
+        def update_pheromones(self, all_ant_positions, all_ant_scores):
+            # 信息素蒸发
+            self.pheromone_matrix *= (1 - self.evaporation_rate)
+
+            # 信息素增强
+            for ant_idx, score in enumerate(all_ant_scores):
+                for plate_idx, position in enumerate(all_ant_positions[ant_idx]):
+                    self.pheromone_matrix[plate_idx, position] += self.q / score
+
+        def optimize(self):
+            global heights
+            for iteration in range(self.max_iter):
+                all_ant_positions = []
+                all_ant_scores = []
+
+                for ant in range(self.num_ants):
+                    ant_position = self.construct_solution()  # 蚂蚁构建初始解
+                    optimized_position, optimized_score = self.sa_optimize(ant_position)  # 模拟退火优化解
+
+                    all_ant_positions.append(optimized_position)
+                    all_ant_scores.append(optimized_score)
+
+                    if optimized_score < self.best_score:
+                        self.best_score = optimized_score
+                        self.best_position = optimized_position.copy()
+
+                # 更新信息素
+                self.update_pheromones(all_ant_positions, all_ant_scores)
+
+                print(f'Iteration {iteration + 1}/{self.max_iter}, Best Score: {self.best_score}')
+
+            return self.best_position, self.best_score
+
+
     if selected_algorithm == "SA (Simulated Annealing)":
         sa_params = {
             'initial_temperature': initial_temperature,
@@ -2114,3 +2252,28 @@ if df is not None:
 
         # 调用优化函数
         run_optimization(MOEAD_with_Batch, moead_params, df, area_positions, output_dir_base, "moead")
+
+    elif selected_algorithm == "HACO (Hybrid Ant Colony Optimization)":
+        # 运行 HACO 优化
+        haco_params = {
+            'num_ants': num_ants,
+            'num_positions': len(Dki),
+            'alpha': alpha,
+            'beta': beta,
+            'evaporation_rate': evaporation_rate,
+            'q': q,
+            'max_iter': max_iter,  # 修正此处，确保 max_iter 有定义
+            'lambda_1': lambda_1,
+            'lambda_2': lambda_2,
+            'lambda_3': lambda_3,
+            'lambda_4': lambda_4,
+            'sa_initial_temp': sa_initial_temp,
+            'sa_cooling_rate': sa_cooling_rate,
+            'sa_min_temp': sa_min_temp,
+            'max_sa_iter': max_sa_iter,
+            'objectives': objectives  # OptimizationObjectives 实例
+        }
+
+        run_optimization(HACO_with_SA, haco_params, df, area_positions, output_dir_base, "haco")
+
+
