@@ -3,7 +3,7 @@ import requests
 from special_questions import handle_special_questions  # 引入特殊问题处理函数
 
 # 从 secrets.toml 文件中获取 OpenWeboi 链接
-openweboi_url = st.secrets.get("openweboi_url", "")
+openweboi_url = st.secrets.get("openweboi_url")
 
 # 定义API类
 class FreeApi:
