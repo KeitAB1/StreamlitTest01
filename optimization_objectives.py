@@ -14,6 +14,13 @@ class OptimizationObjectives:
         self.horizontal_speed = horizontal_speed
         self.vertical_speed = vertical_speed
         self.max_height = 3000  # 设置全局最大高度限制
+        self.material_weights = self.calculate_material_weights()
+
+    # 动态计算材料权重
+    def calculate_material_weights(self):
+        material_types = set(self.plates[:, 3])  # 获取数据集中所有不同的材料类型
+        material_weights = {material: 1.0 + idx * 0.1 for idx, material in enumerate(material_types)}
+        return material_weights
 
     # 目标函数1：最小化翻垛次数和翻转惩罚
     def minimize_stack_movements_and_turnover(self, particle_positions, weight_movement=2.0, weight_turnover=3.0):
@@ -94,14 +101,18 @@ class OptimizationObjectives:
                 pick_time = calculate_pick_time(plate_height)
                 flip_time = calculate_flip_time(plate_idx)
 
+                # 计算材料权重
+                material = self.plates[plate_idx, 3]
+                material_weight = self.material_weights.get(material, 1.0)
+
                 self.heights[area] -= plate_height
-                total_time_energy += (outbound_time + pick_time + flip_time)
+                total_time_energy += material_weight * (outbound_time + pick_time + flip_time)
 
         # 增加高度平衡的惩罚，确保高度不超出设定值
         height_penalty = np.sum([max(0, height - self.max_height) for height in self.heights])
         return total_time_energy + height_penalty * 1000  # 增加不均衡的惩罚
 
-    # 目标函数3：最大化库存均衡度，加入更严格的均衡性惩罚
+    # 目标函数3：最大化库存均衡度
     def maximize_inventory_balance_v2(self, particle_positions):
         total_variance = 0
         total_volume = np.sum(self.plates[:, 0] * self.plates[:, 1] * self.plates[:, 2])
@@ -123,7 +134,7 @@ class OptimizationObjectives:
 
         return total_variance / num_positions
 
-    # 目标函数4：空间利用率最大化，加入惩罚机制
+    # 目标函数4：空间利用率最大化
     def maximize_space_utilization_v3(self, particle_positions, alpha_1=1.0, epsilon=1e-6):
         total_space_utilization = 0
         for i in range(len(self.Dki)):
@@ -142,5 +153,10 @@ class OptimizationObjectives:
             # 如果某个库区利用率过低，增加惩罚
             if used_volume < 0.5 * max_volume:  # 设置利用率阈值
                 total_space_utilization += 10000  # 增加惩罚
+
+            # 添加不同材料混合堆放的惩罚
+            materials_in_position = set(self.plates[j][3] for j in range(len(self.plates)) if particle_positions[j] == i)
+            if len(materials_in_position) > 1:
+                total_space_utilization += 5000  # 增加不同材料混合堆放的惩罚
 
         return total_space_utilization
