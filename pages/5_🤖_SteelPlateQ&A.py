@@ -8,6 +8,11 @@ email = st.secrets.get("email")
 streamlit_password = st.secrets.get("streamlit_password")  # 用于访问 Streamlit 应用的密码
 openwebui_password = st.secrets.get("openwebui_password")  # 用于登录 OpenWebUi 的密码
 
+# openweboi_url = ""
+# email = ""
+# streamlit_password = ""
+# openwebui_password = ""
+
 
 # 定义API类
 class FreeApi:
