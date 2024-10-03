@@ -41,6 +41,9 @@ if st.button("Enter via OpenWeboi"):
     else:
         st.error("OpenWeboi URL not found. Please check your secrets.toml file.")
 
+st.write("#### Simple version assistant")
+st.write("(functional testing is being completed...)")
+
 # 侧栏创建AI参数设置
 with st.sidebar:
     st.header("AI Chat Settings")
