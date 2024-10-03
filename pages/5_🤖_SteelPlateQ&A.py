@@ -2,8 +2,12 @@ import streamlit as st
 import requests
 from special_questions import handle_special_questions  # 引入特殊问题处理函数
 
-# 从 secrets.toml 文件中获取 OpenWeboi 链接
+# 从 secrets.toml 文件中获取信息
 openweboi_url = st.secrets.get("openweboi_url")
+email = st.secrets.get("email")
+streamlit_password = st.secrets.get("streamlit_password")  # 用于访问 Streamlit 应用的密码
+openwebui_password = st.secrets.get("openwebui_password")  # 用于登录 OpenWebUi 的密码
+
 
 # 定义API类
 class FreeApi:
@@ -19,9 +23,10 @@ class FreeApi:
                 except ValueError:
                     return {"error": "Response is not valid JSON.", "content": response.text}
             else:
-                return {"error": f"Failed to fetch data from the API."}
+                return {"error": "Failed to fetch data from the API."}
         except Exception as e:
             return {"error": str(e)}
+
 
 # 初始化对话历史的 session_state
 if 'dialog_history' not in st.session_state:
@@ -31,25 +36,47 @@ if 'dialog_history' not in st.session_state:
 st.title("Steel Plate Intelligent Q&A System")
 
 # 显示英文提示信息
-st.write("The Steel Plate Intelligent Q&A feature is currently being updated. However, you can access it through OpenWeboi via internal network tunneling.")
+st.write(
+    "The Steel Plate Intelligent Q&A feature is currently being updated. However, you can access it through OpenWebUi via internal network tunneling.")
 
-# 添加一个按钮，点击后跳转到 OpenWeboi 的链接
-if st.button("Enter via OpenWeboi"):
+# 添加一个按钮，点击后跳转到 OpenWebUi 的链接
+if st.button("Enter via OpenWebUi"):
     if openweboi_url:
-        st.write("Redirecting to OpenWeboi...")
-        st.markdown(f"[Click here to access OpenWeboi]({openweboi_url})")
+        st.write("Redirecting to OpenWebUi...")
+        st.markdown(f"[Click here to access OpenWebUi]({openweboi_url})")
     else:
-        st.error("OpenWeboi URL not found. Please check your secrets.toml file.")
+        st.error("OpenWebUi URL not found. Please check your secrets.toml file.")
 
 st.write("#### Simple version assistant")
 st.write("(functional testing is being completed...)")
 
 # 侧栏创建AI参数设置
 with st.sidebar:
+
+
+    # 密码输入框，用于 Streamlit 应用的访问
+    entered_streamlit_password = st.text_input("Enter Streamlit Password", type="password")
+    if st.button("Submit Streamlit Password"):
+        if entered_streamlit_password == streamlit_password:
+            st.success("Access granted! Please enter the OpenWebUi password to view credentials.")
+
+            # 输入 OpenWebUi 密码
+            entered_openwebui_password = st.text_input("Enter OpenWebUi Password", type="password")
+            if st.button("Submit OpenWebUi Password"):
+                if entered_openwebui_password == openwebui_password:
+                    st.success("Correct! Here are the credentials to OpenWebUi:")
+                    st.write(f"**Email:** {email}")  # 使用从 secrets.toml 中读取的邮箱
+                    st.write(f"**Password:** {openwebui_password}")  # 使用从 secrets.toml 中读取的 OpenWebUi 密码
+                else:
+                    st.error("Incorrect OpenWebUi password! Please try again.")
+        else:
+            st.error("Incorrect Streamlit password! Please try again.")
+
     st.header("AI Chat Settings")
     temperature = st.slider("Response Temperature", 0.0, 1.0, 0.7)
     max_length = st.slider("Max Response Length", 10, 100, 50)
     st.write("Adjust these settings to control the behavior of the AI responses.")
+
 
 # 回车键触发函数
 def handle_user_input():
@@ -75,6 +102,7 @@ def handle_user_input():
 
         # 清空输入框
         st.session_state.user_input = ''
+
 
 # 输入框，回车键触发
 st.text_input("Enter your question here:", key="user_input", on_change=handle_user_input)
