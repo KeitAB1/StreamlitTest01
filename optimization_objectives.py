@@ -1,6 +1,6 @@
 import numpy as np
 
-class OptimizationObjectives:
+class SteelPlateStackingObjectives:
     def __init__(self, plates, heights, delivery_times, batches, Dki, area_positions, inbound_point, outbound_point, horizontal_speed, vertical_speed):
         self.plates = plates
         self.num_plates = len(plates)
@@ -14,13 +14,6 @@ class OptimizationObjectives:
         self.horizontal_speed = horizontal_speed
         self.vertical_speed = vertical_speed
         self.max_height = 3000  # 设置全局最大高度限制
-        self.material_weights = self.calculate_material_weights()
-
-    # 动态计算材料权重
-    def calculate_material_weights(self):
-        material_types = set(self.plates[:, 3])  # 获取数据集中所有不同的材料类型
-        material_weights = {material: 1.0 + idx * 0.1 for idx, material in enumerate(material_types)}
-        return material_weights
 
     # 目标函数1：最小化翻垛次数和翻转惩罚
     def minimize_stack_movements_and_turnover(self, particle_positions, weight_movement=2.0, weight_turnover=3.0):
@@ -101,18 +94,14 @@ class OptimizationObjectives:
                 pick_time = calculate_pick_time(plate_height)
                 flip_time = calculate_flip_time(plate_idx)
 
-                # 计算材料权重
-                material = self.plates[plate_idx, 3]
-                material_weight = self.material_weights.get(material, 1.0)
-
                 self.heights[area] -= plate_height
-                total_time_energy += material_weight * (outbound_time + pick_time + flip_time)
+                total_time_energy += (outbound_time + pick_time + flip_time)
 
         # 增加高度平衡的惩罚，确保高度不超出设定值
         height_penalty = np.sum([max(0, height - self.max_height) for height in self.heights])
         return total_time_energy + height_penalty * 1000  # 增加不均衡的惩罚
 
-    # 目标函数3：最大化库存均衡度
+    # 目标函数3：最大化库存均衡度，加入更严格的均衡性惩罚
     def maximize_inventory_balance_v2(self, particle_positions):
         total_variance = 0
         total_volume = np.sum(self.plates[:, 0] * self.plates[:, 1] * self.plates[:, 2])
@@ -134,7 +123,7 @@ class OptimizationObjectives:
 
         return total_variance / num_positions
 
-    # 目标函数4：空间利用率最大化
+    # 目标函数4：空间利用率最大化，加入惩罚机制
     def maximize_space_utilization_v3(self, particle_positions, alpha_1=1.0, epsilon=1e-6):
         total_space_utilization = 0
         for i in range(len(self.Dki)):
@@ -154,9 +143,75 @@ class OptimizationObjectives:
             if used_volume < 0.5 * max_volume:  # 设置利用率阈值
                 total_space_utilization += 10000  # 增加惩罚
 
-            # 添加不同材料混合堆放的惩罚
-            materials_in_position = set(self.plates[j][3] for j in range(len(self.plates)) if particle_positions[j] == i)
-            if len(materials_in_position) > 1:
-                total_space_utilization += 5000  # 增加不同材料混合堆放的惩罚
-
         return total_space_utilization
+
+
+class ContainerLoadingObjectives:
+    def __init__(self, items, container_dimensions):
+        self.items = items
+        self.num_items = len(items)
+        self.container_dimensions = container_dimensions
+        self.container_volume = np.prod(container_dimensions)
+        self.max_weight = 14000  # 假设集装箱最大承载重量为24吨（可根据实际调整）
+
+    # 目标函数1：最大化空间利用率
+    def maximize_space_utilization(self, positions):
+        total_volume = 0
+
+        for i, position in enumerate(positions):
+            length, width, height = self.items[i][:3]
+            item_volume = length * width * height
+            total_volume += item_volume
+
+        space_utilization = total_volume / self.container_volume
+        return -space_utilization  # 负值，因为需要最大化
+
+    # 目标函数2：最小化重心偏差
+    def minimize_center_of_gravity_deviation(self, positions):
+        total_weight = 0
+        weighted_x_sum = 0
+        weighted_y_sum = 0
+        weighted_z_sum = 0
+
+        container_length, container_width, container_height = self.container_dimensions
+
+        for i, position in enumerate(positions):
+            length, width, height, weight = self.items[i][:4]
+            x, y, z = position  # 假设 position 给出了每个物体在集装箱内的放置位置
+            total_weight += weight
+            weighted_x_sum += weight * (x + length / 2)
+            weighted_y_sum += weight * (y + width / 2)
+            weighted_z_sum += weight * (z + height / 2)
+
+        if total_weight == 0:
+            return np.inf  # 防止除零错误
+
+        center_of_gravity = (
+            weighted_x_sum / total_weight,
+            weighted_y_sum / total_weight,
+            weighted_z_sum / total_weight,
+        )
+        ideal_center_of_gravity = (
+            container_length / 2,
+            container_width / 2,
+            container_height / 2,
+        )
+        deviation = np.linalg.norm(np.array(center_of_gravity) - np.array(ideal_center_of_gravity))
+        return deviation
+
+    # 目标函数3：约束超载
+    def enforce_weight_limit(self, positions):
+        total_weight = sum(self.items[i][3] for i in range(len(positions)))
+        return max(0, total_weight - self.max_weight) * 1000  # 超重部分的惩罚
+
+    # 计算总适应度
+    def evaluate(self, positions):
+        space_utilization_score = self.maximize_space_utilization(positions)
+        gravity_deviation_score = self.minimize_center_of_gravity_deviation(positions)
+        weight_penalty = self.enforce_weight_limit(positions)
+
+        return (
+            space_utilization_score * 0.5
+            + gravity_deviation_score * 0.3
+            + weight_penalty * 0.2
+        )

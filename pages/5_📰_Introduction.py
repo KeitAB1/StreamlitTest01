@@ -13,8 +13,8 @@ image_dir1 = "data/introduction_src/images01"
 image_dir2 = "data/introduction_src/images02"
 
 # 设置页面标题为黑色，英文副标题为灰色
-st.markdown("<h1 style='text-align: center; color: black;'>智能仓储系统介绍</h1>", unsafe_allow_html=True)
-st.markdown("<h2 style='text-align: center; color: gray;'>Intelligent Warehouse System Introduction</h2>", unsafe_allow_html=True)
+st.write("# 智能钢板堆垛优化系统介绍")
+st.write("Intelligent Warehouse System Introduction")
 
 # 默认按钮样式
 st.markdown("""
@@ -74,7 +74,7 @@ if st.session_state.section == '功能介绍':
     st.markdown("<h3 style='text-align: left; font-weight: bold;'>系统功能介绍</h3>", unsafe_allow_html=True)
 
     st.write("""
-    ### 智能仓储管理系统简介
+    ### 系统简介
 
     智能仓储系统结合了多种技术，旨在帮助优化钢板仓储管理流程。该系统整合了图像识别、自动化入库与出库调度以及堆垛优化算法，力求提高仓储操作的效率和准确性。
 

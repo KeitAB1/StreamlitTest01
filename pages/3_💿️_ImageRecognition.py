@@ -39,8 +39,11 @@ def main():
     elif mode == 'Video Recognition':
         ir.img_rec_instance.Video_Recognition(IMAGE_SAVE_DIR,CSV_FILE_PATH)
 
+
     ir.Rec_history_image(IMAGE_SAVE_DIR)
+    ir.img_rec_instance.mask_Settings()
     ir.csv_display(CSV_FILE_PATH)
+    ir.plot_confidences(ir.img_rec_instance.average_confidences)
 
 
 if __name__ == "__main__":

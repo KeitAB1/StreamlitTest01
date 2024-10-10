@@ -18,7 +18,7 @@ data_source_choice = st.sidebar.radio(
 )
 
 # 定义数据集文件夹路径
-data_dir = "data"  # 你的数据集存放的目录
+data_dir = "data/Steel_Data"  # 你的数据集存放的目录
 
 # 获取可用的 CSV 数据集，并移除 .csv 后缀
 available_datasets = [os.path.splitext(f)[0] for f in os.listdir(data_dir) if f.endswith('.csv')]

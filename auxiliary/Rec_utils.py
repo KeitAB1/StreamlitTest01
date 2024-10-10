@@ -1,5 +1,7 @@
 import os
 import pandas as pd
+import matplotlib.pyplot as plt
+
 
 def clear_csv(file_path):
     """清空CSV文件内容"""
