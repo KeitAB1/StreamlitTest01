@@ -44,7 +44,7 @@ def evaluate_parallel(positions, evaluate_func):
     return results
 
 # 获取数据集
-system_data_dir = "data/Steel_Data"
+system_data_dir = "data/"
 available_datasets = [f.replace('.csv', '') for f in os.listdir(system_data_dir) if f.endswith('.csv')]
 
 st.write("Warehouse and Stack Configuration")
